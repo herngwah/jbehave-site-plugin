@@ -22,6 +22,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
@@ -51,6 +52,7 @@ import org.jbehave.core.reporters.ReportsCount;
  * @phase site
  */
 public class JBehaveMojo extends AbstractMavenReport {
+
 	/**
 	 * Directory where reports will go.
 	 * 
@@ -68,6 +70,14 @@ public class JBehaveMojo extends AbstractMavenReport {
 	private MavenProject project;
 
 	/**
+	 * Directory where jbehave data located.
+	 * 
+	 * @parameter expression="${project.build.directory}/jbehave"
+	 * @required
+	 */
+	private File sourceDirectory;
+
+	/**
 	 * JBehave main page (jbehave/index, jbehave/reports, jbehave/maps)
 	 * 
 	 * @parameter default-value="jbehave/reports"
@@ -79,9 +89,22 @@ public class JBehaveMojo extends AbstractMavenReport {
 	 * JBehave report formats (html, xml, txt)
 	 * 
 	 * @parameter
-	 * @required
 	 */
 	private List<String> formats;
+
+	/**
+	 * JBehave view resources
+	 * 
+	 * @parameter
+	 */
+	private Properties viewResources;
+
+	/**
+	 * Force create link
+	 * 
+	 * @parameter default-value="false"
+	 */
+	private boolean force;
 
 	/**
 	 * @component
@@ -91,6 +114,21 @@ public class JBehaveMojo extends AbstractMavenReport {
 	private Renderer siteRenderer;
 
 	private boolean external = false;
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see org.apache.maven.reporting.AbstractMavenReport#canGenerateReport()
+	 */
+	@Override
+	public boolean canGenerateReport() {
+		if (force || sourceDirectory.exists()) {
+			return true;
+		} else {
+			getLog().info("No story to report.");
+			return false;
+		}
+	}
 
 	/*
 	 * (non-Javadoc)
@@ -123,6 +161,42 @@ public class JBehaveMojo extends AbstractMavenReport {
 		return output;
 	}
 
+	/**
+	 * Get formats
+	 * 
+	 * @return the formats
+	 */
+	public List<String> getFormats() {
+		if (formats == null) {
+			formats = new ArrayList<String>();
+			formats.add("html");
+		}
+		return formats;
+	}
+
+	/**
+	 * Get view resources
+	 * 
+	 * @return the viewResources
+	 */
+	public Properties getViewResources() {
+		if (viewResources == null) {
+			viewResources = new Properties();
+			viewResources.put("viewDirectory", "../site/jbehave");
+		}
+		return viewResources;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see org.apache.maven.reporting.AbstractMavenReport#isExternalReport()
+	 */
+	@Override
+	public boolean isExternalReport() {
+		return external;
+	}
+
 	/*
 	 * (non-Javadoc)
 	 * 
@@ -132,14 +206,11 @@ public class JBehaveMojo extends AbstractMavenReport {
 	 */
 	@Override
 	protected void executeReport(Locale arg0) throws MavenReportException {
-		File f = new File("target/jbehave");
 		Log log = getLog();
-		if (f.exists()) {
+		if (sourceDirectory.exists()) {
 			FreemarkerViewGenerator view = new FreemarkerViewGenerator();
-			Properties viewResources = new Properties();
-			viewResources.put("viewDirectory", "../site/jbehave");
-			viewResources.put("decorateNonHtml", "true");
-			view.generateReportsView(f, formats, viewResources);
+			view.generateReportsView(sourceDirectory, getFormats(),
+					getViewResources());
 			ReportsCount count = view.getReportsCount();
 			log.info("Generated " + count.getStories() + " stories with "
 					+ count.getScenarios() + " scenarios");
@@ -167,12 +238,12 @@ public class JBehaveMojo extends AbstractMavenReport {
 				log.warn(e);
 			}
 		} else {
-			log.warn("No story found");
+			log.info("No story to report.");
 			Sink sink = getSink();
 			sink.body();
 			sink.section1();
 			sink.sectionTitle1();
-			sink.text("No story to test.");
+			sink.text("No story to report.");
 			sink.sectionTitle1_();
 			sink.section1_();
 			sink.body_();
@@ -180,6 +251,36 @@ public class JBehaveMojo extends AbstractMavenReport {
 			sink.close();
 			external = false;
 		}
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see org.apache.maven.reporting.AbstractMavenReport#getOutputDirectory()
+	 */
+	@Override
+	protected String getOutputDirectory() {
+		return outputDirectory;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see org.apache.maven.reporting.AbstractMavenReport#getProject()
+	 */
+	@Override
+	protected MavenProject getProject() {
+		return project;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see org.apache.maven.reporting.AbstractMavenReport#getSiteRenderer()
+	 */
+	@Override
+	protected Renderer getSiteRenderer() {
+		return siteRenderer;
 	}
 
 	/**
@@ -243,48 +344,8 @@ public class JBehaveMojo extends AbstractMavenReport {
 	 */
 	private void copyCss() throws IOException {
 		URL css = this.getClass().getResource("/style/jbehave-core.css");
-		FileUtils.copyURLToFile(css, new File(
-				outputDirectory + "style/jbehave-core.css"));
-	}
-
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.apache.maven.reporting.AbstractMavenReport#getOutputDirectory()
-	 */
-	@Override
-	protected String getOutputDirectory() {
-		return outputDirectory;
-	}
-
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.apache.maven.reporting.AbstractMavenReport#getProject()
-	 */
-	@Override
-	protected MavenProject getProject() {
-		return project;
-	}
-
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.apache.maven.reporting.AbstractMavenReport#getSiteRenderer()
-	 */
-	@Override
-	protected Renderer getSiteRenderer() {
-		return siteRenderer;
-	}
-
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.apache.maven.reporting.AbstractMavenReport#isExternalReport()
-	 */
-	@Override
-	public boolean isExternalReport() {
-		return external;
+		FileUtils.copyURLToFile(css, new File(outputDirectory
+				+ "style/jbehave-core.css"));
 	}
 
 }
